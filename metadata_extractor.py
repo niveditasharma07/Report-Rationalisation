@@ -79,7 +79,7 @@ db_list = []
 source_list = []
 reports_with_database_source = []
 
-FILE_LOC = "metaval-ex-ad-rpt"
+FILE_LOC = "metadatafile.txt"
 print()
 print("Invoking JSON parser...")
 
@@ -380,8 +380,11 @@ for line in lines:
                                             table_names.append(table.name)
 
                                         # find all tables (x, y, z)
-                                        for table in parse_one(query).find_all(exp.Table):
-                                            table_aliases.append(table.alias)
+                                        for table in parse_one(query).find_all(exp.Table): #Condition that checks is there even an alias for a table or not
+                                            if table.alias:    
+                                                table_aliases.append(table.alias)
+                                            else:
+                                                table_aliases.append(table.name)    
 
                                         num_of_entries = len(table_names)
                                         for i in range (0, num_of_entries):
@@ -398,7 +401,7 @@ for line in lines:
                                         aliase_columns_with_expressions = [i.sql() for i in parse_one(query).expressions]
 
                                         num_of_entries = len(alias_column_names)
-                                        for i in range (0, num_of_entries):
+                                        for i in range (num_of_entries): #Removed '0'
                                             alias_name = alias_column_names[i]
                                             alias_or_non_alias_name = aliased_and_non_aliased_column_names[i]
                                             if alias_name:    
@@ -430,6 +433,8 @@ for line in lines:
                                                     arr = alias_or_non_alias_name.split(".")
                                                     name = arr[1]
                                                     table_alias = arr[0]
+                                                else:
+                                                    table_alias = table_names[i] #Fallback to table name if alias is not present    
                                                 alias_column_table_alias_mapping[name] = table_alias
                                                 all_column_names.append(name)
 
@@ -506,7 +511,8 @@ for line in lines:
                                             else:
                                                 source_table_name_list.append("")      
 
-                                except:
+                                except Exception as e:
+                                    print(f"Error processing report {rep_id}: {str(e)}")
                                     for col in columnNames:
                                         source_column_name_list.append("") 
                                         source_table_name_list.append("")  
@@ -554,10 +560,10 @@ with pd.ExcelWriter(f"workspace_report_map.xlsx") as writer:
 with pd.ExcelWriter(f"workspace_dashboard.xlsx") as writer:
     workspaceDashboardMap.to_excel(writer, sheet_name='mapping', index=False)
 
-# Writing in excel
-# df = pd.DataFrame(data=dict)
-# with pd.ExcelWriter(f"source_data.xlsx") as writer:
-#     df.to_excel(writer, sheet_name='source_data', index=False)
+
+df = pd.DataFrame(data=dict)
+with pd.ExcelWriter(f"source_data.xlsx") as writer:
+    df.to_excel(writer, sheet_name='source_data', index=False)
 
 df = pd.DataFrame(reports_with_database_source)    
 with pd.ExcelWriter(f"DB_Reports.xlsx") as writer:
