@@ -4,9 +4,9 @@ import re
 from sqlglot import parse_one, exp
 from collections import OrderedDict
 
-KEYWORDS = {"SUM", "MIN", "MAX", "AVG"}
+KEYWORDS = {"SUM", "MIN", "MAX", "AVG", "CASE", "WHEN", "AND", "THEN", "END", "INTEGER", "FLOOR", "CURRENT", "DATE"}
 query = """
-SELECT DISTINCT T1.ORZN_DEPT_CDE AS RFO_CDE, T1.ORZN_ZONE_CDE AS RFO_ZONE_NM, (SUBSTRING(T1.ORZN_ZONE_CDE,6,5)) AS MARKET_ID, T3.ORZN_DEPT_DSCR, T3.EMP_ID, T3.EMP_STS_TYP_CDE, T3.TRMN_DT, T3.JOB_TYP_CDE, T3.JOB_TYP_DSCR, T3.EMP_NM, CASE WHEN T3.EMP_NM IS NULL THEN 'VACANT' ELSE T3.EMP_NM END AS MARKET_LEADERS FROM SEMANTIC.SALES_HIERARCHY_DIMENSION T1 LEFT JOIN ( SELECT DISTINCT T1.SALE_HIER_ID, T1.ORZN_ZONE_CDE, T1.ORZN_DEPT_DSCR, T2.ORZN_DEPT_CDE, T2.EMP_ID, T2.EMP_STS_TYP_CDE, T2.TRMN_DT, T2.JOB_TYP_CDE, T2.JOB_TYP_DSCR, T2.EMP_NM FROM SEMANTIC.SALES_HIERARCHY_DIMENSION T1 LEFT JOIN HUMAN_RESOURCES.CNF_EMP_DIM_DTL_CURR_CFDL T2 ON T1.SALE_HIER_ID = T2.EMP_ID WHERE T1.CURR_ROW_IND = 'Y' AND T2.EMP_STS_TYP_CDE IN ('A') AND T1.EFF_END_TMSP IS NULL AND T2.CURR_ROW_IND = 'Y' AND T1.EFF_END_TMSP IS NULL AND T2.JOB_TYP_CDE IN ('001002', '001003',/* '001004', '001005',*/ '001007') AND T2.EMP_ID NOT IN('TS62904','TS67022') ) T3 ON T1.ORZN_ZONE_CDE = T3.ORZN_ZONE_CDE WHERE T1.CURR_ROW_IND = 'Y' AND T1.EFF_END_TMSP IS NULL --AND T1.RFO_ZONE_STS_CDE IN ('A') AND SUBSTRING(T1.ORZN_ZONE_CDE,6,2) <> '00' AND T1.ORZN_DEPT_CDE <> 'UKWN' ORDER BY T1.ORZN_ZONE_CDE; ']),    #'FILTERED ROWS' = TABLE.SELECTROWS(SOURCE, EACH ([EMP_ID] <> 'TS18670    ' AND [EMP_ID] <> 'TS73067    ' AND [EMP_ID] <> 'TS73124    ' AND [EMP_ID] <> 'TS74827    ' AND [EMP_ID] <> 'TS77319    '))IN    #'FILTERED ROWS
+SELECT  A.EMP_ID,          A.JOB_TYP_DSCR,         A.EMP_STS_TYP_CDE,         A.CURR_ROW_IND, A.TRMN_DT,         A.ADJ_SVC_DT,        /* TENURE */         (DAYS(CURRENT_DATE)-DAYS(A.ADJ_SVC_DT) ) / 365.25 AS TENURE,         /* TENURE_GROUP */         (CASE WHEN ((DAYS(CURRENT_DATE)-DAYS(A.ADJ_SVC_DT))/365.25 ) <= 1 THEN 'NFR1'                WHEN ((DAYS(CURRENT_DATE)-DAYS(A.ADJ_SVC_DT))/365.25 ) > 1 AND                   ((DAYS(CURRENT_DATE)-DAYS(A.ADJ_SVC_DT))/365.25 ) <= 2 THEN 'NFR2'              WHEN ((DAYS(CURRENT_DATE)-DAYS(A.ADJ_SVC_DT))/365.25 ) > 2 AND                   ((DAYS(CURRENT_DATE)-DAYS(A.ADJ_SVC_DT))/365.25 ) <= 3 THEN 'NFR3'               WHEN ((DAYS(CURRENT_DATE)-DAYS(A.ADJ_SVC_DT))/365.25 ) > 3 AND                   ((DAYS(CURRENT_DATE)-DAYS(A.ADJ_SVC_DT))/365.25 ) <= 4 THEN 'NFR4'               WHEN ((DAYS(CURRENT_DATE)-DAYS(A.ADJ_SVC_DT))/365.25 ) > 4 AND                   ((DAYS(CURRENT_DATE)-DAYS(A.ADJ_SVC_DT))/365.25 ) <= 5 THEN 'VET5'               WHEN ((DAYS(CURRENT_DATE)-DAYS(A.ADJ_SVC_DT))/365.25 ) > 5 AND                   ((DAYS(CURRENT_DATE)-DAYS(A.ADJ_SVC_DT))/365.25 ) <= 6 THEN 'VET6'              WHEN ((DAYS(CURRENT_DATE)-DAYS(A.ADJ_SVC_DT))/365.25 ) > 6 AND                   ((DAYS(CURRENT_DATE)-DAYS(A.ADJ_SVC_DT))/365.25 ) <= 7 THEN 'VET7'                ELSE 'VET8+'          END) AS TENURE_GROUP              FROM HUMAN_RESOURCES.CNF_EMP_DIM_DTL_CURR_CFDL A    WHERE A.EMP_STS_TYP_CDE IN ('A','I','L','D','T','R')     AND A.CURR_ROW_IND = 'Y'               AND (A.JOB_FMLY_CDE LIKE 'FLD%' OR          A.JOB_FMLY_CDE ='SALES' OR          A.TF_JOB_CLAS_CDE ='FAC')     AND A.ORZN_DEPT_CDE NOT IN ('2410','3005','7151','7152',                                 '9150','9134','NA', '4100',                                 '6053','6100','8900')     AND (A.JOB_TYP_CDE IN ('002003','002010','002011','002012','002016','002017','002018','002019',                            '002000','002020','002021','002022','002024','002026','002027',                            '002030','002031','002032','003100','003500','003602',                            '003604','003605','003606','003607','003608') OR           A.ORZN_DEPT_CDE IN ('5405','5407','5408','5409','6100','1701','1702','1703'))    AND A.ADJ_SVC_DT IS NOT NULL     ORDER BY A.EMP_ID']),    #'FILTERED ROWS' = TABLE.SELECTROWS(SOURCE, EACH TRUE),    #'CHANGED TYPE' = TABLE.TRANSFORMCOLUMNTYPES(#'FILTERED ROWS',{{'ADJ_SVC_DT', TYPE DATE}, {'TENURE', INT64.TYPE}, {'TRMN_DT', TYPE DATE}}),    #'ADDED CUSTOM' = TABLE.ADDCOLUMN(#'CHANGED TYPE', 'TSID FOR MERGE', EACH TEXT.TRIM([EMP_ID]))IN    #'ADDED CUSTOM
 """
 
 # Function to check if column is complete
@@ -16,16 +16,21 @@ def is_balanced(val):
     count_open_flr = val.count("{")
     count_clse_flr = val.count("{")
     count_open_brc = val.count("(")
-    count_clse_brc = val.count(")")   
+    count_clse_brc = val.count(")")  
+    count_quote = val.count("'")
     if ( (count_open_sqr - count_clse_sqr) != 0 or (count_open_flr - count_clse_flr) !=0 or 
-        (count_open_brc - count_clse_brc) != 0):
+        (count_open_brc - count_clse_brc) != 0 or (count_quote%2 != 0)):
         return False
     else:
-        return True 
+        # Check if Case statements are complete or not
+        if val.strip().startswith("CASE ") and (" END " not in val or " AS " not in val):
+            return False
+        else:
+            return True 
 
 # Function to clean and simplify the SQL query
 def clean_sql_query(query):
-    query = re.sub(r"['\"]", "", query)  # Remove single and double quotes
+    #query = re.sub(r"['\"]", "", query)  # Remove single and double quotes
     query = re.sub(r"(\n|\t|\r)", " ", query)  # Remove new lines and tabs
     query = re.sub(r"\s+", " ", query)  # Replace multiple spaces with a single space
     return query.strip()
@@ -90,22 +95,22 @@ def split_column_and_alias(column):
         else:
             # Remove output column
             input_columnArr = columnArr[: n-1]
-        
+
         for col in input_columnArr:
             # Contains table name
             if("." in col):
                 val = col.split(".")[1]
                 res = re.split(r"[^_a-zA-Z0-9\s]", val)
                 val = res[0]
-                if val not in input_columns:
+                if val not in input_columns and not val.isnumeric():
                     input_columns.append(val)   
             else:
                 if( not contains_table_ref):
                     res = re.split(r"[^_a-zA-Z0-9\s]", col)
                     for val in res:
-                        if (val not in KEYWORDS) and (len(val) > 1):
-                            input_columns.append(val)                                
-
+                        if (val not in KEYWORDS) and (len(val) > 1 and not val.isnumeric()):
+                            if val not in input_columns:
+                                input_columns.append(val)                                
     else :
         if column.endswith("]"):
             # Check if it contains both input and output
@@ -113,7 +118,7 @@ def split_column_and_alias(column):
             if total > 1:
                 for i in range(total-1):
                     val = str(res[i]).replace("[", "").replace("]", "")
-                    if val not in input_columns:
+                    if val not in input_columns and not val.isnumeric():
                         input_columns.append(val)
                 val = str(res[total-1]).replace("[", "").replace("]", "")
                 output_column = val
@@ -123,7 +128,7 @@ def split_column_and_alias(column):
         else :
             for col in res:
                 val = str(col).replace("[", "").replace("]", "")
-                if val not in input_columns:
+                if val not in input_columns and not val.isnumeric():
                         input_columns.append(val)
 
     return input_columns, output_column
