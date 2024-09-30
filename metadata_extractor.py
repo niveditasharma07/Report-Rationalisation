@@ -4,7 +4,143 @@ import codecs
 import pandas as pd
 import re
 from sqlglot import parse_one, exp
+import sqlparse
+from collections import OrderedDict
 
+KEYWORDS = {"SUM", "MIN", "MAX", "AVG", "CASE", "WHEN", "AND", "THEN", "END", "INTEGER", "FLOOR", "CURRENT", "DATE"}
+
+# Function to check if column is complete
+def is_balanced(val):
+    count_open_sqr = val.count("[")
+    count_clse_sqr = val.count("]")
+    count_open_flr = val.count("{")
+    count_clse_flr = val.count("{")
+    count_open_brc = val.count("(")
+    count_clse_brc = val.count(")")  
+    count_quote = val.count("'")
+    if ( (count_open_sqr - count_clse_sqr) != 0 or (count_open_flr - count_clse_flr) !=0 or 
+        (count_open_brc - count_clse_brc) != 0 or (count_quote%2 != 0)):
+        return False
+    else:
+        # Check if Case statements are complete or not
+        if val.strip().startswith("CASE ") and (" END " not in val or " AS " not in val):
+            return False
+        else:
+            return True 
+
+# Function to clean and simplify the SQL query
+def clean_sql_query(query):
+
+    query = result.group(1).upper() + "'"
+    query = query[1:]
+    query = query.replace("#(LF)", " ")
+    query = query.replace("#(TAB)", " ")
+    if query.endswith("'"):
+        query = query[:-1]
+
+    #query = re.sub(r"['\"]", "", query)  # Remove single and double quotes
+    query = re.sub(r"(\n|\t|\r)", " ", query)  # Remove new lines and tabs
+    query = re.sub(r"\s+", " ", query)  # Replace multiple spaces with a single space
+    return query.strip()
+
+# Function to extract tables and columns from the SELECT part of the query
+def extract_columns(query):
+    parsed = sqlparse.parse(query)[0]
+
+    # Set to hold extracted columns and tables
+    columns = set()
+
+    # Patterns to identify source columns and tables
+    column_pattern = re.compile(r"SELECT\s+(.*?)\s+FROM", re.IGNORECASE)
+
+    # Clean and split the query into components
+    cleaned_query = clean_sql_query(query)
+
+    # Extract columns from SELECT clause
+    select_match = re.search(column_pattern, cleaned_query)
+    if select_match:
+
+        # Split the columns, handle aliases, and strip extra spaces
+        columns_clause = select_match.group(1)
+        # Remove DISTINCT keyword
+        if columns_clause.startswith("DISTINCT "):
+            columns_clause = columns_clause[8:]
+        
+        columnArr = columns_clause.split(",")
+        i=0
+        while( i < len(columnArr)):
+            val = columnArr[i]
+            while((not is_balanced(val)) and (i < len(columnArr)-1)):
+                i = i+1
+                val = val+","+columnArr[i]
+            columns.add(val)
+            i = i+1
+
+    return columns
+
+
+# Function to split a column into output and alias
+def split_column_and_alias(column):
+    column = column.strip()
+    contains_table_ref = "." in column
+    columnArr = column.split(" ")
+    n = len(columnArr)
+    output_column = columnArr[n-1]
+
+    # Check if there is a table reference in column name
+    if "." in output_column:
+        output_columnArr = output_column.split(".")
+        m = len(output_columnArr)
+        output_column = output_columnArr[m-1]
+    
+    # Check if there is a [] format to extract the columns
+    input_columns =  []
+    res = re.findall(r'\[.*?\]', column)
+    if not res:
+        if ("AS" in columnArr) and (columnArr[n-2] == "AS"):
+            # Remove last 2 elements - AS and output column
+            input_columnArr = columnArr[: n-2]
+        else:
+            # Remove output column
+            input_columnArr = columnArr[: n-1]
+
+        for col in input_columnArr:
+            # Contains table name
+            if("." in col):
+                val = col.split(".")[1]
+                res = re.split(r"[^_a-zA-Z0-9\s]", val)
+                val = res[0]
+                if val not in input_columns and not val.isnumeric():
+                    input_columns.append(val)   
+            else:
+                if( not contains_table_ref):
+                    res = re.split(r"[^_a-zA-Z0-9\s]", col)
+                    for val in res:
+                        if (val not in KEYWORDS) and (len(val) > 1 and not val.isnumeric()):
+                            if val not in input_columns:
+                                input_columns.append(val)                                
+    else :
+        if column.endswith("]"):
+            # Check if it contains both input and output
+            total = len(res)
+            if total > 1:
+                for i in range(total-1):
+                    val = str(res[i]).replace("[", "").replace("]", "")
+                    if val not in input_columns and not val.isnumeric():
+                        input_columns.append(val)
+                val = str(res[total-1]).replace("[", "").replace("]", "")
+                output_column = val
+            else:
+                val = str(res[0]).replace("[", "").replace("]", "")
+                output_column = val
+        else :
+            for col in res:
+                val = str(col).replace("[", "").replace("]", "")
+                if val not in input_columns and not val.isnumeric():
+                        input_columns.append(val)
+
+    return input_columns, output_column
+        
 
 # Purpose: The JSON parser will extract the information required to build
 # the table for Report generation - source_data
@@ -338,7 +474,7 @@ for line in lines:
                                 print(f"Total number of reports with database source: {len(reports_with_database_source)}")
 
                             else:
-                                sourceType = "Unknown"
+                                sourceType = "Report metadata"
                                 datasource_value = expression
 
                                 
@@ -348,169 +484,21 @@ for line in lines:
                                     print("report ids are---------",rep_id)
                                     result = re.search('Query=(.*)\'', expression)
                                     query = result.group(1).upper() + "'"
-                                    query = query[1:]
-                                    query = query.replace("#(LF)", " ")
-                                    query = query.replace("#(TAB)", " ")
-                                    if query.endswith("'"):
-                                        query = query[:-1]
-                                    
-                                    if "WHERE" in query:
-                                        result = re.search('(.*) WHERE', query)
-                                        query = result.group(1)
-
-                                    if ('[' in query) and (']' in query):
-                                        for col in columnNames:
-                                            source_column_name_list.append("") 
-                                            source_table_name_list.append("")
-                                            table_name_list.append(tableName)
-                                    else:
-                                        table_names = []
-                                        table_aliases = []
-                                        table_name_alias_map = {}
-                                        all_table_alias_names = []
-                                        all_column_names = []
-                                        column_names_with_alias = []
-                                        column_expression_map = {}
-                                        alias_column_table_alias_mapping = {}
-                                        column_name_to_alias_name_mapping = {}
-                                        column_name_to_source_table_mapping = {}
-                                        table_schemas = {}
-
-                                        for table in parse_one(query).find_all(exp.Table):
-                                            table_names.append(table.name)
-
-                                        # find all tables (x, y, z)
-                                        for table in parse_one(query).find_all(exp.Table): #Condition that checks is there even an alias for a table or not
-                                            if table.alias:    
-                                                table_aliases.append(table.alias)
-                                            else:
-                                                table_aliases.append(table.name)    
-
-                                        num_of_entries = len(table_names)
-                                        for i in range (0, num_of_entries):
-                                            table_name_alias_map[table_aliases[i]] = table_names[i]
-                                            if table_names[i] not in all_table_alias_names:
-                                                all_table_alias_names.append(table_aliases[i])
-
-                                        all_table_alias_names = list(dict.fromkeys(all_table_alias_names))
-                                            
-                                        alias_column_names = [i.alias for i in parse_one(query).expressions]
-
-                                        aliased_and_non_aliased_column_names = [i.alias if i.alias else i.sql() for i in parse_one(query).expressions]
-
-                                        aliase_columns_with_expressions = [i.sql() for i in parse_one(query).expressions]
-
-                                        num_of_entries = len(alias_column_names)
-                                        for i in range (num_of_entries): #Removed '0'
-                                            alias_name = alias_column_names[i]
-                                            alias_or_non_alias_name = aliased_and_non_aliased_column_names[i]
-                                            if alias_name:    
-                                                expr = aliase_columns_with_expressions[i]
-                                                column_expression_map[alias_name] = expr
-                                                found = False
-                                                for tbl in all_table_alias_names:
-                                                    if tbl+"." in expr:
-                                                        alias_column_table_alias_mapping[alias_name] = tbl
-                                                        found = True
-                                                        break
-                                                        
-                                                if not found:
-                                                    alias_column_table_alias_mapping[alias_name] = ""
-                                                    expr = replace_str(expr)
-                                                    arr = expr.split(" ")
-                                                    for a in arr:
-                                                        if "." in a:
-                                                            arr2 = a.split(".")
-                                                            alias_column_table_alias_mapping[alias_name] = arr2[0]
-                                                            found = True
-                                                            break            
-                                                column_names_with_alias.append(alias_name)
-                                                all_column_names.append(alias_name)
-                                            else:
-                                                name = alias_or_non_alias_name
-                                                table_alias = ""
-                                                if "." in alias_or_non_alias_name:
-                                                    arr = alias_or_non_alias_name.split(".")
-                                                    name = arr[1]
-                                                    table_alias = arr[0]
-                                                else:
-                                                    table_alias = table_names[i] #Fallback to table name if alias is not present    
-                                                alias_column_table_alias_mapping[name] = table_alias
-                                                all_column_names.append(name)
-
-                                        num_of_entries = len(all_table_alias_names)
-
-                                        for column in all_column_names:
-                                            if column in column_names_with_alias:
-                                                result = ""
-                                                expr = column_expression_map[column]
-                                                expr = replace_str(expr)
-                                                arr = expr.split(" ")
-                                                for a in arr:
-                                                    if "." in a:
-                                                        arr2 = a.split(".")
-                                                        if arr2[0] == alias_column_table_alias_mapping[column]:
-                                                            result = arr2[1]
-                                                            break
-                                                column_name_to_alias_name_mapping[column] = result
-                                                
-                                                outval = ""
-                                                for i in range (0, num_of_entries):
-                                                    val1 = all_table_alias_names[i] + "." + result + " "
-                                                    val2 = all_table_alias_names[i] + "." + result + ","
-                                                    if val1.upper() in query.upper() or val2.upper() in query.upper():
-                                                        outval = table_name_alias_map[all_table_alias_names[i]] 
-                                                        break
-                                                        
-                                                column_name_to_source_table_mapping[column] = outval
-                                            else:
-                                                column_name_to_alias_name_mapping[column] = column      
-
-                                                outval = ""
-                                                for i in range (0, num_of_entries):
-                                                    val1 = all_table_alias_names[i] + "." + column + " "
-                                                    val2 = all_table_alias_names[i] + "." + column + ","
-                                                    if val1.upper() in query.upper() or val2.upper() in query.upper():
-                                                        outval = table_name_alias_map[all_table_alias_names[i]] 
-                                                        break
-                                                        
-                                                column_name_to_source_table_mapping[column] = outval 
-                                                
-                                        arr = query.split(" ")
-                                        for alias_name in table_name_alias_map:
-                                            table_name = table_name_alias_map[alias_name]
-                                            for a in arr:
-                                                if "." in a:
-                                                    arr2 = a.split(".")
-                                                    if arr2[1] == table_name:
-                                                        table_schemas[table_name] = arr2[0]
-                                                        break
-                                        
-                                        for colName in columnNames:
-                                            if colName in alias_column_table_alias_mapping: 
-                                                table_name_list.append(alias_column_table_alias_mapping[colName])
-                                            else:
-                                                table_name_list.append(tableName)
-                                                
-                                            if colName in column_name_to_alias_name_mapping: 
-                                                val = column_name_to_alias_name_mapping[colName]
-                                                source_column_name_list.append(val)
-                                            else:
-                                                source_column_name_list.append("")
-                                            
-                                            if colName in column_name_to_source_table_mapping: 
-                                                table_name_source = column_name_to_source_table_mapping[colName]
-                                                result = table_name_source
-                                                if table_name_source in table_schemas:
-                                                    result = result + ":" + table_schemas[table_name_source] 
-
-                                                if result:
-                                                    source_table_name_list.append(result)
-                                                else:
-                                                    source_table_name_list.append("")
-                                            else:
-                                                source_table_name_list.append("")      
-
+                                    clean_sql_query(query)
+                                    columns = extract_columns(query)
+                                    all_columns = {}
+                                    for column in columns:
+                                        input_columns, output_column = split_column_and_alias(column)
+                                        all_columns[output_column] = input_columns
+                                    for meta_col in columnNames:
+                                        col_val = meta_col
+                                        if meta_col in all_columns:
+                                            value = all_columns[meta_col]
+                                            if value:
+                                                col_val = str(value) 
+                                        source_column_name_list.append(col_val)
+                                        source_table_name_list.append(tableName)
+                                        table_name_list.append(tableName)
                                 except Exception as e:
                                     print(f"Error processing report {rep_id}: {str(e)}")
                                     for col in columnNames:
@@ -562,7 +550,7 @@ with pd.ExcelWriter(f"workspace_dashboard.xlsx") as writer:
 
 
 df = pd.DataFrame(data=dict)
-with pd.ExcelWriter(f"source_data.xlsx") as writer:
+with pd.ExcelWriter(f"source_data_latest.xlsx") as writer:
     df.to_excel(writer, sheet_name='source_data', index=False)
 
 df = pd.DataFrame(reports_with_database_source)    
