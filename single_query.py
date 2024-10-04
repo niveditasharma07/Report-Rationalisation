@@ -45,44 +45,6 @@ def clean_sql_query(query):
     query = re.sub(r"\s+", " ", query)  # Replace multiple spaces with a single space
     return query.strip()
 
-# def extract_main_table(query):
-#     # Clean the query to make it more uniform
-#     cleaned_query = clean_sql_query(query)
-
-#     # Adjusted pattern to capture the main table and alias, allowing spaces in table names
-#     # Stop capturing when it encounters a keyword like JOIN or WHERE
-#     main_table_pattern = re.compile(
-#         r"FROM\s+([a-zA-Z0-9_\[\].\s]+(?:\s+[a-zA-Z0-9_]+)?)\s+(?=(?:LEFT|INNER|RIGHT|FULL|JOIN|WHERE|GROUP|ORDER|HAVING|UNION)\b)",
-#         re.IGNORECASE
-#     )
-
-#     # Search for the main table using the defined pattern
-#     main_table_match = re.search(main_table_pattern, cleaned_query)
-#     if main_table_match:
-#         # Extract the main table name and clean brackets if present
-#         main_table = main_table_match.group(1).replace("[", "").replace("]", "").strip()
-#         print(f"Main Source Table: {main_table}")
-#         return main_table
-
-#     return None
-
-
-# 
-
-# def extract_main_table(query):
-#     # Clean the query to make it more uniform
-#     cleaned_query = clean_sql_query(query)
-
-#     # Adjusted pattern to capture the main table name and exclude join keywords like LEFT, INNER, JOIN, etc.
-#     main_table_pattern = re.compile(r"FROM\s+([a-zA-Z0-9_\[\].\s]+)\b(?:AS\s+[a-zA-Z0-9_]+)?(?=\s+LEFT|\s+INNER|\s+JOIN|$)", re.IGNORECASE)
-
-#     # Search for the main table using the defined pattern
-#     main_table_match = re.search(main_table_pattern, cleaned_query)
-#     if main_table_match:
-#         # Extract the main table name and clean brackets if present
-#         main_table = main_table_match.group(1).replace("[", "").replace("]", "").strip()
-#         print(f"Main Source Table: {main_table}")
-#         return main_table
 
 def extract_main_table(query):
     # Clean the query to make it more uniform
@@ -101,24 +63,6 @@ def extract_main_table(query):
 
     return None
 
-#     return None
-# def extract_main_table(query):
-#     # Clean the query to make it more uniform
-#     cleaned_query = clean_sql_query(query)
-
-#     # Adjusted pattern to capture schema and table names, optionally handling square brackets
-#     # Updated pattern to allow spaces within table names
-#     main_table_pattern = re.compile(r"FROM\s+([a-zA-Z0-9_\[\].\s]+)\s*\b(?:AS\s+[a-zA-Z0-9_]+)?", re.IGNORECASE)
-
-#     # Search for the main table using the defined pattern
-#     main_table_match = re.search(main_table_pattern, cleaned_query)
-#     if main_table_match:
-#         # Extract the main table name and clean brackets if present
-#         main_table = main_table_match.group(1).replace("[", "").replace("]", "")
-#         print(f"Main Source Table: {main_table}")
-#         return main_table
-
-#     return None
 # Call the function with the query
 extract_main_table(query)
 # Function to extract tables and columns from the SELECT part of the query
