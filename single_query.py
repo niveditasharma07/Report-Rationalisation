@@ -7,23 +7,17 @@ from collections import OrderedDict
 KEYWORDS = {"SUM", "MIN", "MAX", "AVG", "CASE", "WHEN", "AND", "THEN", "END", "INTEGER", "FLOOR", "CURRENT", "DATE"}
 query = """
 SELECT 
-	A.CUST_SK,        
-	A.CUST_ID_NBR,        
-	CASE WHEN XX.HOH_NAMEXX <> '' THEN XX.HOH_NAMEXX        ELSE A.CUST_LGAL_LST_NM||', '||A.CUST_LGAL_FRST_NM       END AS HOH_NAME,
-	A.CUST_LGAL_LST_NM||', '||A.CUST_LGAL_FRST_NM AS CLIENT_NAME,       
-	A.CUST_LGAL_FMT_NM,        
-	A.CUST_LGAL_FRST_NM,        
-	A.CUST_LGAL_LST_NM,        
-	A.CUST_GRLN_TYP_CDE,        
-	A.CUST_GRP_ID_NBR,        
-	B.STP_STS_CDE,        
-	CASE WHEN B.FUT_VLU_INDX_CDE = 'GOLD' THEN 'GOLD'             WHEN B.FUT_VLU_INDX_CDE = 'SILVR' THEN 'SILVER'             WHEN B.FUT_VLU_INDX_CDE = 'BRNZE' THEN 'BRONZE'             WHEN B.FUT_VLU_INDX_CDE IN ('NA','UNK',' ' ) THEN 'UNKNOWN'        END AS FUTUREVALUE,        
-	CASE WHEN A.MBR_TYP_CDE = 'BEN' THEN 'BENEFIT'             WHEN A.MBR_TYP_CDE = 'ASSOC' THEN 'ASSOCIATE'             WHEN A.MBR_TYP_CDE = 'JUV' THEN 'JUVENILE'             WHEN A.MBR_TYP_CDE = 'NON' AND A.CLAS_CTRC_RLTN_CDE <> 'NA' THEN 'NON-MEMBER'             WHEN A.MBR_TYP_CDE = 'NON' AND A.CLAS_CTRC_RLTN_CDE = 'NA' THEN 'PROSPECT'        END AS MBRTYPE,        CASE WHEN A.CUST_AGE < 0 THEN 'UKWN'            WHEN A.CUST_AGE < 18 THEN '<18'            WHEN A.CUST_AGE < 25 THEN '18-24'            WHEN A.CUST_AGE < 35 THEN '25-34'            WHEN A.CUST_AGE < 45 THEN '35-44'            WHEN A.CUST_AGE < 55 THEN '45-54'            WHEN A.CUST_AGE < 65 THEN '55-64'            WHEN A.CUST_AGE < 75 THEN '65-74'            WHEN A.CUST_AGE < 85 THEN '75-84'            WHEN A.CUST_AGE >= 85 THEN '85+'         ELSE ' '         END AS CUST_AGE_GRP,        CASE WHEN A.CUST_AGE < 18 THEN '<18'             WHEN A.CUST_AGE >= 18 THEN '18+'         ELSE ' '        END AS CLNT_AGE_TYP,        
-	CASE WHEN B.FUT_VLU_INDX_CDE = 'GOLD' AND B.STP_STS_CDE = 'YES' THEN 'A'            WHEN B.FUT_VLU_INDX_CDE = 'SILVR' AND B.STP_STS_CDE = 'YES' THEN 'B'          WHEN B.FUT_VLU_INDX_CDE = 'GOLD' AND B.STP_STS_CDE <> 'YES' THEN 'B'          WHEN B.FUT_VLU_INDX_CDE = 'BRNZE' AND B.STP_STS_CDE = 'YES' THEN 'C'          WHEN B.FUT_VLU_INDX_CDE = 'SILVR' AND B.STP_STS_CDE <> 'YES' THEN 'C'          WHEN B.FUT_VLU_INDX_CDE = 'BRNZE' AND B.STP_STS_CDE <> 'YES' THEN 'D'          ELSE ' '        END AS CLIENT_SERVICE_MODEL,        
-	C.EMP_ORZN_ID   
-FROM MEMBER.ITGR_IDVL_ALL_CURR_CFDL A LEFT JOIN        MEMBER.CNF_CUST_RESID_MAIL_GRP_DIM_CFDL B     ON A.CUST_GRP_SK=B.CUST_GRP_SK INNER JOIN         CLNT_ASMT_DM.CUST_REPR_ASGN_CURR_CFDL C       /* CLNT_ASMT_DM.CUST_SREP_RLTN_CURR_CFDL C */       /* CLNT_ASMT_DM.CUST_REPR_COMP_RLTN_CURR_CFDL C */     ON A.CUST_SK = C.ACRT_CUST_SK AND        A.MBR_TYP_CDE IN ('BEN','NON','ASSOC','JUV') AND        C.EMP_ORZN_ID LIKE 'TS%' LEFT JOIN      (SELECT X.CUST_GRP_ID_NBR,               X.CUST_LGAL_LST_NM||', '||X.CUST_LGAL_FRST_NM AS HOH_NAMEXX        
-FROM MEMBER.ITGR_IDVL_ALL_CURR_CFDL X       WHERE X.CUST_GRLN_TYP_CDE IN ('PRIM','PRIMD')) AS XX    ON A.CUST_GRP_ID_NBR=XX.CUST_GRP_ID_NBR    WHERE (A.MBR_TYP_CDE IN ('BEN','ASSOC','JUV') OR         A.MBR_TYP_CDE = 'NON' AND A.CLAS_CTRC_RLTN_CDE <> 'NA') ']),    #'FILTERED ROWS' = TABLE.SELECTROWS(SOURCE, EACH TRUE),    #'REPLACED VALUE' = TABLE.REPLACEVALUE(#'FILTERED ROWS','','UNKNOWN',REPLACER.REPLACEVALUE,{'FUTUREVALUE'}),    #'REPLACED VALUE1' = TABLE.REPLACEVALUE(#'REPLACED VALUE',NULL,'UNKNOWN',REPLACER.REPLACEVALUE,{'FUTUREVALUE'}),    #'APPENDED QUERY' = TABLE.COMBINE({#'REPLACED VALUE1', CLIENT_HHLD_NON_MGP}),    #'REMOVED DUPLICATES' = TABLE.DISTINCT(#'APPENDED QUERY', {'CUST_ID_NBR'}),    #'REPLACED VALUE2' = TABLE.REPLACEVALUE(#'REMOVED DUPLICATES','JUVENILE','YOUTH',REPLACER.REPLACETEXT,{'MBRTYPE'}),    #'ADDED CUSTOM' = TABLE.ADDCOLUMN(#'REPLACED VALUE2', 'YEAR-TSID', EACH 'CY'&[EMP_ORZN_ID]),    #'MERGED QUERIES' = TABLE.NESTEDJOIN(#'ADDED CUSTOM', {'CUST_ID_NBR'}, MGP_CLIENTS, {'CUST_ID_NBR'}, 'MGP_CLIENTS', JOINKIND.LEFTOUTER),    #'EXPANDED MGP_CLIENTS' = TABLE.EXPANDTABLECOLUMN(#'MERGED QUERIES', 'MGP_CLIENTS', {'ASOFDT', 'TSID_MGP', 'GOALS DOCUMENTED', 'GOALS DOCUMENTED TOTAL', 'GOAL INDICATOR'}, {'MGP_CLIENTS.ASOFDT', 'MGP_CLIENTS.TSID_MGP', 'MGP_CLIENTS.GOALS DOCUMENTED', 'MGP_CLIENTS.GOALS DOCUMENTED TOTAL', 'MGP_CLIENTS.GOAL INDICATOR'}),    #'REPLACED VALUE3' = TABLE.REPLACEVALUE(#'EXPANDED MGP_CLIENTS',NULL,'UNKNOWN',REPLACER.REPLACEVALUE,{'MGP_CLIENTS.TSID_MGP'}),    #'REPLACED VALUE4' = TABLE.REPLACEVALUE(#'REPLACED VALUE3',NULL,0,REPLACER.REPLACEVALUE,{'MGP_CLIENTS.GOALS DOCUMENTED'}),    #'REPLACED VALUE5' = TABLE.REPLACEVALUE(#'REPLACED VALUE4',NULL,0,REPLACER.REPLACEVALUE,{'MGP_CLIENTS.GOALS DOCUMENTED TOTAL'}),    #'REPLACED VALUE6' = TABLE.REPLACEVALUE(#'REPLACED VALUE5',NULL,'N',REPLACER.REPLACEVALUE,{'MGP_CLIENTS.GOAL INDICATOR'})IN    #'REPLACED VALUE6
+	B.SRC_SYS_KEY_TXT, 
+	B.FRST_NM+' '+B.LST_NM AS EMP_NM, 
+	C.ORZN_ZONE_CDE, 
+	C.ORZN_DEPT_CDE, 
+	A.JOB_TYP_CDE, 
+	CAST(A.EFF_BEG_DT AS DATE) AS EFF_BEG_DT, 
+	ADJ_SVC_DT 
+FROM [DM_01].[WORKER_STATUS_FCT] A LEFT JOIN [DM_01].[ORGANIZATION_DIM] B ON A.ORZN_DIM_SK=B.ORZN_DIM_SK LEFT JOIN [DM_01].[SALE_HIER_DIM] C ON (B.SRC_SYS_KEY_TXT=C.SALE_HIER_ID AND C.EFF_END_DT='9999-12-31 00:00:00' AND C.CURR_ROW_IND='Y') WHERE ( --A.JOB_TYP_CDE='001004' OR A.JOB_TYP_CDE='001005' OR A.JOB_TYP_CDE='001011' OR A.JOB_TYP_CDE='001007' ) AND  B.CURR_ROW_IND='Y' AND A.EFF_END_DT='9999-12-31 00:00:00' AND EMP_STS_TYP_CDE='A'']),    #'CHANGED TYPE' = TABLE.TRANSFORMCOLUMNTYPES(SOURCE,{{'EFF_BEG_DT', TYPE DATE}, {'ADJ_SVC_DT', TYPE DATE}}),    #'FILTERED ROWS' = TABLE.SELECTROWS(#'CHANGED TYPE', EACH [JOB_TYP_CDE] <> '001004'),    #'REMOVED COLUMNS' = TABLE.REMOVECOLUMNS(#'FILTERED ROWS',{'ADJ_SVC_DT'}),    #'MERGED QUERIES' = TABLE.NESTEDJOIN(#'REMOVED COLUMNS', {'SRC_SYS_KEY_TXT'}, #'WORKDAY LEADER DIRECTORY', {'EMPLOYEE ID'}, 'WORKDAY LEADER DIRECTORY', JOINKIND.LEFTOUTER),    #'EXPANDED WORKDAY LEADER DIRECTORY' = TABLE.EXPANDTABLECOLUMN(#'MERGED QUERIES', 'WORKDAY LEADER DIRECTORY', {'COST CENTER', 'START DATE IN CURRENT JOB OR HIRE DATE', 'WORKER'}, {'WORKDAY LEADER DIRECTORY.COST CENTER', 'WORKDAY LEADER DIRECTORY.START DATE IN CURRENT JOB OR HIRE DATE', 'WORKDAY LEADER DIRECTORY.WORKER'}),    #'ADDED CUSTOM1' = TABLE.ADDCOLUMN(#'EXPANDED WORKDAY LEADER DIRECTORY', 'FINAL NAME', EACH IF [WORKDAY LEADER DIRECTORY.WORKER] IS NULL THEN [EMP_NM] ELSE [WORKDAY LEADER DIRECTORY.WORKER]),    #'REMOVED COLUMNS2' = TABLE.REMOVECOLUMNS(#'ADDED CUSTOM1',{'EMP_NM', 'WORKDAY LEADER DIRECTORY.WORKER'}),    #'REORDERED COLUMNS' = TABLE.REORDERCOLUMNS(#'REMOVED COLUMNS2',{'SRC_SYS_KEY_TXT', 'FINAL NAME', 'ORZN_ZONE_CDE', 'ORZN_DEPT_CDE', 'JOB_TYP_CDE', 'EFF_BEG_DT', 'WORKDAY LEADER DIRECTORY.COST CENTER', 'WORKDAY LEADER DIRECTORY.START DATE IN CURRENT JOB OR HIRE DATE'}),    #'RENAMED COLUMNS2' = TABLE.RENAMECOLUMNS(#'REORDERED COLUMNS',{{'FINAL NAME', 'EMP_NM'}}),    #'MERGED QUERIES1' = TABLE.NESTEDJOIN(#'RENAMED COLUMNS2', {'SRC_SYS_KEY_TXT'}, #'MARKET MAPPING', {'ZONE_LEADER_TSID'}, 'MARKET MAPPING', JOINKIND.LEFTOUTER),    #'EXPANDED MARKET MAPPING' = TABLE.EXPANDTABLECOLUMN(#'MERGED QUERIES1', 'MARKET MAPPING', {'HIER_ID'}, {'MARKET MAPPING.HIER_ID'}),    #'RENAMED COLUMNS' = TABLE.RENAMECOLUMNS(#'EXPANDED MARKET MAPPING',{{'ORZN_ZONE_CDE', 'WORKER_STS_FCT_MKT'}, {'MARKET MAPPING.HIER_ID', 'ORZN_ZONE_CDE'}, {'EFF_BEG_DT', 'WORKER_STS_FCT_DT'}, {'WORKDAY LEADER DIRECTORY.START DATE IN CURRENT JOB OR HIRE DATE', 'EFF_BEG_DT'}}),    #'MERGED QUERIES2' = TABLE.NESTEDJOIN(#'RENAMED COLUMNS', {'SRC_SYS_KEY_TXT'}, #'0630 LEADER BACKUP', {'EMPLOYEE ID'}, '0630 LEADER BACKUP', JOINKIND.LEFTOUTER),    #'EXPANDED 0630 LEADER BACKUP' = TABLE.EXPANDTABLECOLUMN(#'MERGED QUERIES2', '0630 LEADER BACKUP', {'EMPLOYEE ID', 'START DATE IN CURRENT JOB OR HIRE DATE'}, {'0630 LEADER BACKUP.EMPLOYEE ID', '0630 LEADER BACKUP.START DATE IN CURRENT JOB OR HIRE DATE'}),    #'FILTERED ROWS1' = TABLE.SELECTROWS(#'EXPANDED 0630 LEADER BACKUP', EACH ([0630 LEADER BACKUP.EMPLOYEE ID] <> NULL)),    #'DATE FILTER' = TABLE.SELECTROWS(#'FILTERED ROWS1', EACH [EFF_BEG_DT] >= #DATE(2023, 1, 1)),    #'JOB CODE FILTER' = TABLE.SELECTROWS(#'DATE FILTER', EACH ([JOB_TYP_CDE] = '001007')),    #'APPEND EXCEPTIONS' = TABLE.COMBINE({#'JOB CODE FILTER', #'DIR EXCEPTIONS'}),    CUSTOM1 = TABLE.ADDCOLUMN(#'APPEND EXCEPTIONS', 'PICTURE', EACH 'HTTPS://MYFIELD.THRIVENT.COM/CONTENT/FAIMAGES/' & [SRC_SYS_KEY_TXT] & '.JPG
+
 """
+
 
 # Function to check if column is complete
 def is_balanced(val):
@@ -51,6 +45,82 @@ def clean_sql_query(query):
     query = re.sub(r"\s+", " ", query)  # Replace multiple spaces with a single space
     return query.strip()
 
+# def extract_main_table(query):
+#     # Clean the query to make it more uniform
+#     cleaned_query = clean_sql_query(query)
+
+#     # Adjusted pattern to capture the main table and alias, allowing spaces in table names
+#     # Stop capturing when it encounters a keyword like JOIN or WHERE
+#     main_table_pattern = re.compile(
+#         r"FROM\s+([a-zA-Z0-9_\[\].\s]+(?:\s+[a-zA-Z0-9_]+)?)\s+(?=(?:LEFT|INNER|RIGHT|FULL|JOIN|WHERE|GROUP|ORDER|HAVING|UNION)\b)",
+#         re.IGNORECASE
+#     )
+
+#     # Search for the main table using the defined pattern
+#     main_table_match = re.search(main_table_pattern, cleaned_query)
+#     if main_table_match:
+#         # Extract the main table name and clean brackets if present
+#         main_table = main_table_match.group(1).replace("[", "").replace("]", "").strip()
+#         print(f"Main Source Table: {main_table}")
+#         return main_table
+
+#     return None
+
+
+# 
+
+# def extract_main_table(query):
+#     # Clean the query to make it more uniform
+#     cleaned_query = clean_sql_query(query)
+
+#     # Adjusted pattern to capture the main table name and exclude join keywords like LEFT, INNER, JOIN, etc.
+#     main_table_pattern = re.compile(r"FROM\s+([a-zA-Z0-9_\[\].\s]+)\b(?:AS\s+[a-zA-Z0-9_]+)?(?=\s+LEFT|\s+INNER|\s+JOIN|$)", re.IGNORECASE)
+
+#     # Search for the main table using the defined pattern
+#     main_table_match = re.search(main_table_pattern, cleaned_query)
+#     if main_table_match:
+#         # Extract the main table name and clean brackets if present
+#         main_table = main_table_match.group(1).replace("[", "").replace("]", "").strip()
+#         print(f"Main Source Table: {main_table}")
+#         return main_table
+
+def extract_main_table(query):
+    # Clean the query to make it more uniform
+    cleaned_query = clean_sql_query(query)
+
+    # Modified pattern to stop before LEFT, INNER, or JOIN keywords, ensuring they are excluded
+    main_table_pattern = re.compile(r"FROM\s+([a-zA-Z0-9_\[\].\s]+?)(?=\s+(?:LEFT|INNER|JOIN|RIGHT|FULL|WHERE|GROUP|ORDER|HAVING|$))", re.IGNORECASE)
+
+    # Search for the main table using the defined pattern
+    main_table_match = re.search(main_table_pattern, cleaned_query)
+    if main_table_match:
+        # Extract the main table name and clean brackets if present
+        main_table = main_table_match.group(1).replace("[", "").replace("]", "").strip()
+        print(f"Main Source Table: {main_table}")
+        return main_table
+
+    return None
+
+#     return None
+# def extract_main_table(query):
+#     # Clean the query to make it more uniform
+#     cleaned_query = clean_sql_query(query)
+
+#     # Adjusted pattern to capture schema and table names, optionally handling square brackets
+#     # Updated pattern to allow spaces within table names
+#     main_table_pattern = re.compile(r"FROM\s+([a-zA-Z0-9_\[\].\s]+)\s*\b(?:AS\s+[a-zA-Z0-9_]+)?", re.IGNORECASE)
+
+#     # Search for the main table using the defined pattern
+#     main_table_match = re.search(main_table_pattern, cleaned_query)
+#     if main_table_match:
+#         # Extract the main table name and clean brackets if present
+#         main_table = main_table_match.group(1).replace("[", "").replace("]", "")
+#         print(f"Main Source Table: {main_table}")
+#         return main_table
+
+#     return None
+# Call the function with the query
+extract_main_table(query)
 # Function to extract tables and columns from the SELECT part of the query
 def extract_columns(query):
     parsed = sqlparse.parse(query)[0]
