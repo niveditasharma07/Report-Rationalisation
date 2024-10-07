@@ -6,6 +6,7 @@ import re
 from sqlglot import parse_one, exp
 import sqlparse
 from collections import OrderedDict
+from tables_schema import extract_tables
 
 KEYWORDS = {"SUM", "MIN", "MAX", "AVG", "CASE", "WHEN", "AND", "THEN", "END", "INTEGER", "FLOOR", "CURRENT", "DATE"}
 
@@ -485,6 +486,10 @@ for line in lines:
                                     result = re.search('Query=(.*)\'', expression)
                                     query = result.group(1).upper() + "'"
                                     clean_sql_query(query)
+
+                                    # Get Table Names
+                                    source_table_names = extract_tables(query)
+
                                     columns = extract_columns(query)
                                     all_columns = {}
                                     for column in columns:
@@ -497,7 +502,10 @@ for line in lines:
                                             if value:
                                                 col_val = str(value) 
                                         source_column_name_list.append(col_val)
-                                        source_table_name_list.append(tableName)
+                                        if source_table_names:
+                                            source_table_name_list.append(source_table_names)
+                                        else:
+                                            source_table_name_list.append(tableName)
                                         table_name_list.append(tableName)
                                 except Exception as e:
                                     print(f"Error processing report {rep_id}: {str(e)}")
