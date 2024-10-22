@@ -1,4 +1,5 @@
 import re
+import traceback
 import json
 import codecs
 import pandas as pd
@@ -7,141 +8,8 @@ from sqlglot import parse_one, exp
 import sqlparse
 from collections import OrderedDict
 from tables_schema import extract_tables
+from single_query import clean_sql_query, extract_columns, split_column_and_alias
 
-KEYWORDS = {"SUM", "MIN", "MAX", "AVG", "CASE", "WHEN", "AND", "THEN", "END", "INTEGER", "FLOOR", "CURRENT", "DATE"}
-
-# Function to check if column is complete
-def is_balanced(val):
-    count_open_sqr = val.count("[")
-    count_clse_sqr = val.count("]")
-    count_open_flr = val.count("{")
-    count_clse_flr = val.count("{")
-    count_open_brc = val.count("(")
-    count_clse_brc = val.count(")")  
-    count_quote = val.count("'")
-    if ( (count_open_sqr - count_clse_sqr) != 0 or (count_open_flr - count_clse_flr) !=0 or 
-        (count_open_brc - count_clse_brc) != 0 or (count_quote%2 != 0)):
-        return False
-    else:
-        # Check if Case statements are complete or not
-        if val.strip().startswith("CASE ") and (" END " not in val or " AS " not in val):
-            return False
-        else:
-            return True 
-
-# Function to clean and simplify the SQL query
-def clean_sql_query(query):
-
-    query = result.group(1).upper() + "'"
-    query = query[1:]
-    query = query.replace("#(LF)", " ")
-    query = query.replace("#(TAB)", " ")
-    if query.endswith("'"):
-        query = query[:-1]
-
-    #query = re.sub(r"['\"]", "", query)  # Remove single and double quotes
-    query = re.sub(r"(\n|\t|\r)", " ", query)  # Remove new lines and tabs
-    query = re.sub(r"\s+", " ", query)  # Replace multiple spaces with a single space
-    return query.strip()
-
-# Function to extract tables and columns from the SELECT part of the query
-def extract_columns(query):
-    parsed = sqlparse.parse(query)[0]
-
-    # Set to hold extracted columns and tables
-    columns = set()
-
-    # Patterns to identify source columns and tables
-    column_pattern = re.compile(r"SELECT\s+(.*?)\s+FROM", re.IGNORECASE)
-
-    # Clean and split the query into components
-    cleaned_query = clean_sql_query(query)
-
-    # Extract columns from SELECT clause
-    select_match = re.search(column_pattern, cleaned_query)
-    if select_match:
-
-        # Split the columns, handle aliases, and strip extra spaces
-        columns_clause = select_match.group(1)
-        # Remove DISTINCT keyword
-        if columns_clause.startswith("DISTINCT "):
-            columns_clause = columns_clause[8:]
-        
-        columnArr = columns_clause.split(",")
-        i=0
-        while( i < len(columnArr)):
-            val = columnArr[i]
-            while((not is_balanced(val)) and (i < len(columnArr)-1)):
-                i = i+1
-                val = val+","+columnArr[i]
-            columns.add(val)
-            i = i+1
-
-    return columns
-
-
-# Function to split a column into output and alias
-def split_column_and_alias(column):
-    column = column.strip()
-    contains_table_ref = "." in column
-    columnArr = column.split(" ")
-    n = len(columnArr)
-    output_column = columnArr[n-1]
-
-    # Check if there is a table reference in column name
-    if "." in output_column:
-        output_columnArr = output_column.split(".")
-        m = len(output_columnArr)
-        output_column = output_columnArr[m-1]
-    
-    # Check if there is a [] format to extract the columns
-    input_columns =  []
-    res = re.findall(r'\[.*?\]', column)
-    if not res:
-        if ("AS" in columnArr) and (columnArr[n-2] == "AS"):
-            # Remove last 2 elements - AS and output column
-            input_columnArr = columnArr[: n-2]
-        else:
-            # Remove output column
-            input_columnArr = columnArr[: n-1]
-
-        for col in input_columnArr:
-            # Contains table name
-            if("." in col):
-                val = col.split(".")[1]
-                res = re.split(r"[^_a-zA-Z0-9\s]", val)
-                val = res[0]
-                if val not in input_columns and not val.isnumeric():
-                    input_columns.append(val)   
-            else:
-                if( not contains_table_ref):
-                    res = re.split(r"[^_a-zA-Z0-9\s]", col)
-                    for val in res:
-                        if (val not in KEYWORDS) and (len(val) > 1 and not val.isnumeric()):
-                            if val not in input_columns:
-                                input_columns.append(val)                                
-    else :
-        if column.endswith("]"):
-            # Check if it contains both input and output
-            total = len(res)
-            if total > 1:
-                for i in range(total-1):
-                    val = str(res[i]).replace("[", "").replace("]", "")
-                    if val not in input_columns and not val.isnumeric():
-                        input_columns.append(val)
-                val = str(res[total-1]).replace("[", "").replace("]", "")
-                output_column = val
-            else:
-                val = str(res[0]).replace("[", "").replace("]", "")
-                output_column = val
-        else :
-            for col in res:
-                val = str(col).replace("[", "").replace("]", "")
-                if val not in input_columns and not val.isnumeric():
-                        input_columns.append(val)
-
-    return input_columns, output_column
-        
 
 # Purpose: The JSON parser will extract the information required to build
 # the table for Report generation - source_data
@@ -149,59 +17,6 @@ def split_column_and_alias(column):
 # a list of Reports or list of Dashboards.
 # Two separate mapping tables are created to map the Report/Dashboard
 # against the Workspace to which it belongs.
-
-def replace_str( s ):
-    s = s.replace('(', ' ')
-    s = s.replace(')', ' ')
-    s = s.replace(',', ' ')
-    return s
-    
-def get_source_table( expression ):
-    expression = expression.replace("from", "FROM")
-    expression = expression.replace("left", "LEFT")
-    expression = expression.replace("right", "RIGHT")
-    expression = expression.replace("inner", "INNER")
-
-    val = ""
-    result = re.search('FROM (.*) LEFT', expression)
-    if result is not None:
-        val = result.group(1)
-        arr = val.split(" ")
-        i = 0
-        for a in arr:
-            if a == "LEFT":
-                break
-            i = i+1
-        val = arr[i-1]
-        
-    if val != "":
-        return val
-        
-    result = re.search('FROM (.*) INNER', expression)
-    if result is not None:
-        val = result.group(1)
-        arr = val.split(" ")
-        i = 0
-        for a in arr:
-            if a == "INNER":
-                break
-            i = i+1
-        val = arr[i-1]
-
-    if val != "":
-        return val
-        
-    result = re.search('FROM (.*)#', expression)
-    if result is not None:
-        val = result.group(1)
-        arr = val.split("#")
-        arr = arr[0].split(" ")
-        n = len(arr)
-        val = arr[n-1]
-        if val == "START":
-            val = ""
-        
-    return val        
 
 report_id_list = []
 report_name_list = []
@@ -470,9 +285,9 @@ for line in lines:
                                     "reportId": rep_id,      # Assuming 'report_id' is available
                                     "reportName": reportName   # Assuming 'report_name' is available
                                         })  
-                                for report in reports_with_database_source:
-                                    print(f"Report ID: {report['reportId']}, Report Name: {report['reportName']}")  
-                                print(f"Total number of reports with database source: {len(reports_with_database_source)}")
+                                # for report in reports_with_database_source:
+                                #     print(f"Report ID: {report['reportId']}, Report Name: {report['reportName']}")  
+                                # print(f"Total number of reports with database source: {len(reports_with_database_source)}")
 
                             else:
                                 sourceType = "Report metadata"
@@ -482,11 +297,11 @@ for line in lines:
                             if (sourceType == "Database") and ("Query=" in expression):
                             
                                 try :
-                                    print("report ids are---------",rep_id)
+                                    # print("report ids are---------",rep_id)
                                     result = re.search('Query=(.*)\'', expression)
                                     query = result.group(1).upper() + "'"
-                                    clean_sql_query(query)
-
+                                    query = clean_sql_query(query)
+                                    
                                     # Get Table Names
                                     source_table_names = extract_tables(query)
 
@@ -509,6 +324,7 @@ for line in lines:
                                         table_name_list.append(tableName)
                                 except Exception as e:
                                     print(f"Error processing report {rep_id}: {str(e)}")
+                                    traceback.print_exc()
                                     for col in columnNames:
                                         source_column_name_list.append("") 
                                         source_table_name_list.append("")  
@@ -558,7 +374,7 @@ with pd.ExcelWriter(f"workspace_dashboard.xlsx") as writer:
 
 
 df = pd.DataFrame(data=dict)
-with pd.ExcelWriter(f"source_data_latest.xlsx") as writer:
+with pd.ExcelWriter(f"source_data.xlsx") as writer:
     df.to_excel(writer, sheet_name='source_data', index=False)
 
 df = pd.DataFrame(reports_with_database_source)    
