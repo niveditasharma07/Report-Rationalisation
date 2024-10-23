@@ -4,7 +4,7 @@ import re
 from sqlglot import parse_one, exp
 from collections import OrderedDict
 
-KEYWORDS = {"SUM", "MIN", "MAX", "AVG", "CASE", "WHEN", "AND", "THEN", "END", "INTEGER", "FLOOR", "CURRENT", "DATE"}
+KEYWORDS = {"SUM", "MIN", "MAX", "AVG", "CASE", "WHEN", "AND", "THEN", "END", "INTEGER", "FLOOR", "CURRENT DATE"}
 query = """
 SELECT TASK_FCT.[TASK DIMENSION SURROGATE KEY],        TASK_FCT.[PERSON DIMENSION SURROGATE KEY],        TASK_DIM.[TASK DATE],        SUM(TASK_FCT.[TASK OCCURS]) [TASK_OCCURS],        TASK_FCT.[PERSON OCCURS],         TASK_DIM.[TASK TYPE NAME],        TASK_DIM.[TASK STATUS NAME],        DATE_DIM.[CALENDAR YEAR NAME] AS ''PERFORMANCE YEAR NAME'',        DATE_DIM.[CALENDAR YEAR WEEK NUMBER] AS ''PERFORMANCE YEAR WEEK NUMBER'',        ORG_DIM.[SOURCE SYSTEM KEY TEXT] AS TSID,        --SALE_HIER_DIM.ORZN_DEPT_CDE,        --SALE_HIER_DIM.ORZN_ZONE_CDE,        ORG_DIM.[FIRST NAME] + ' ' + ORG_DIM.[LAST NAME] AS NAME         --ORG_DIM.[JOB TYPE CODE] AS JOB_TYP_CDE,        --ORG_DIM.[ADJUSTED SERVICE DATE] AS ADJ_SVC_DT,        --ORG_DIM.[EMPLOYEE STATUS TYPE CODE] AS EMP_STS_TYP_CDE   FROM ENTERPRISEDATAMART.[DM_01].[TASK FACT] TASK_FCT LEFT JOIN        ENTERPRISEDATAMART.[DM_01].[TASK DIMENSION] TASK_DIM     ON TASK_FCT.[TASK DIMENSION SURROGATE KEY] = TASK_DIM.[TASK DIMENSION SURROGATE KEY] LEFT JOIN        ENTERPRISEDATAMART.DM_01.[DATE DIMENSION] DATE_DIM     ON TASK_DIM.[TASK DATE]=DATE_DIM.[CALENDAR DATE DATE] LEFT JOIN         ENTERPRISEDATAMART.DM_01.[ORGANIZATION DIMENSION] ORG_DIM     ON ((TASK_FCT.[TASK ORGANIZATION DIMENSION SURROGATE KEY] = ORG_DIM.[ORGANIZATION DIMENSION SURROGATE KEY]) AND     (TASK_DIM.[TASK DATE] BETWEEN ORG_DIM.[EFFECTIVE BEGIN DATE] AND ORG_DIM.[EFFECTIVE END DATE])) LEFT JOIN         ENTERPRISEDATAMART.DM_01.[SALE_HIER_DIM] SALE_HIER_DIM    ON ((SALE_HIER_DIM.EFF_BEG_DT <= TASK_DIM.[TASK DATE]) AND        (TASK_DIM.[TASK DATE] <= DATEADD(DAY,-1,SALE_HIER_DIM.EFF_END_DT)) AND          SALE_HIER_DIM.CURR_ROW_IND = 'Y' AND          ORG_DIM.[SOURCE SYSTEM KEY TEXT]=SALE_HIER_DIM.[SALE_HIER_ID])   WHERE TASK_DIM.[TASK TYPE NAME] IN ('APPROACH  CALL','APPROACH CALL')    AND TASK_DIM.[TASK STATUS NAME] IN ('COMPLETED', 'AUTO COMPLETED', 'IN PROGRESS')     AND TASK_FCT.[PERSON DIMENSION SURROGATE KEY] <> 0    AND SALE_HIER_DIM.ORZN_DEPT_CDE IN ('0115','0165','0190','0240','0283','0291','0361','0365','0384','0410','0435','0475','0496','0525','0529','0810')    AND (ORG_DIM.[JOB TYPE CODE] IN ('002000', '002003', '002008', '002010', '002011', '002012', '002016', '002022', '002025', '002026', '002027', '002030', '002032', '003100', '003500')     OR ORG_DIM.[DEPARTMENT IDENTIFIER] IN ('5405','5407','5408','5409','1701','1702','1703','0383'))       AND DATE_DIM.[PERFORMANCE YEAR NAME] IN ('2022','2023')      GROUP BY    TASK_FCT.[TASK DIMENSION SURROGATE KEY],    TASK_FCT.[PERSON DIMENSION SURROGATE KEY],    TASK_DIM.[TASK DATE],    DATE_DIM.[CALENDAR YEAR NAME],    DATE_DIM.[CALENDAR YEAR WEEK NUMBER],    TASK_FCT.[PERSON OCCURS],     TASK_DIM.[TASK TYPE NAME],    TASK_DIM.[TASK STATUS NAME],    DATE_DIM.[CALENDAR YEAR NAME],    DATE_DIM.[CALENDAR YEAR WEEK NUMBER],    DATE_DIM.[CALENDAR WEEK END DATE],    ORG_DIM.[SOURCE SYSTEM KEY TEXT],    --SALE_HIER_DIM.ORZN_DEPT_CDE,    --SALE_HIER_DIM.ORZN_ZONE_CDE,    ORG_DIM.[FIRST NAME] + ' ' + ORG_DIM.[LAST NAME]     --ORG_DIM.[JOB TYPE CODE],    --ORG_DIM.[ADJUSTED SERVICE DATE],    --ORG_DIM.[EMPLOYEE STATUS TYPE CODE]   HAVING     SUM(TASK_FCT.[TASK OCCURS]) > 0   
 
@@ -153,7 +153,7 @@ def split_column_and_alias(column):
     output_column = columnArr[n-1]
     
     # Check if there is a table reference in column name
-    if "." in output_column:
+    if "." in output_column:        
         output_columnArr = output_column.split(".")
         m = len(output_columnArr)
         output_column = output_columnArr[m-1]
@@ -161,7 +161,7 @@ def split_column_and_alias(column):
     # Check if there is a [] format to extract the columns
     input_columns =  []
     res = re.findall(r'\[.*?\]', column)
-    if not res:                
+    if not res:             
         if ("AS" in columnArr) and (columnArr[n-2] == "AS"):
             # Remove last 2 elements - AS and output column
             input_columnArr = columnArr[: n-2]
@@ -192,7 +192,17 @@ def split_column_and_alias(column):
                 arr = column.split(" AS ")
                 if len(arr) == 2:
                     val = arr[0].replace("[", "").replace("]", "")
-                    input_columns.append(val)
+                    if "(" in val:
+                        if val.startswith("CASE "):
+                            val = val.replace("CASE", "").replace("WHEN", "").replace("THEN", "")
+                        res = re.split(r"[^_a-zA-Z0-9\s]", val)                  
+                        for val in res:
+                            val = val.strip()
+                            if (val not in KEYWORDS) and (len(val) > 1 and not val.isnumeric()):
+                                if val not in input_columns:
+                                    input_columns.append(val)  
+                    else:
+                        input_columns.append(val)                                                  
                     val = arr[1].replace("[", "").replace("]", "")                
                     output_column = val
             elif total > 1:
