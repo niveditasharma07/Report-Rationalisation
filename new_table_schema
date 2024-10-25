@@ -1,0 +1,65 @@
+import re
+import sqlparse
+ 
+def extract_tables(queries):
+    tables = []
+    for query in queries:
+        cleaned_query = query.strip()
+        # Use regex to extract FROM and JOIN clauses
+        from_matches = re.findall(r"\bFROM\s+([a-zA-Z0-9_\[\]\.\s]+)", cleaned_query)
+        join_matches = re.findall(r"\bJOIN\s+([a-zA-Z0-9_\[\]\.\s]+)", cleaned_query)
+ 
+        # Process FROM clause with sqlparse
+        if from_matches:
+            from_clause = from_matches[0]
+            tables.extend(parse_sql_with_sqlparse(from_clause))
+ 
+        # Process JOIN clauses with sqlparse
+        for join_clause in join_matches:
+            tables.extend(parse_sql_with_sqlparse(join_clause))
+ 
+    # Remove duplicates and clean table names
+    cleaned_tables = list(set(filter_valid_tables(tables)))
+    return cleaned_tables
+ 
+def parse_sql_with_sqlparse(sql_fragment):
+    """Use sqlparse to extract table names from a SQL fragment."""
+    tables = []
+    parsed = sqlparse.parse(sql_fragment)[0]  # Parse the SQL fragment
+    for token in parsed.tokens:
+        if isinstance(token, sqlparse.sql.IdentifierList):
+            for identifier in token.get_identifiers():
+                tables.append(clean_table_name(str(identifier)))
+        elif isinstance(token, sqlparse.sql.Identifier):
+            tables.append(clean_table_name(str(token)))
+    return tables
+ 
+def clean_table_name(table_name):
+    # Remove alias (e.g., "AS A" or "B")
+    table_name = re.sub(r"\s+(AS\s+[a-zA-Z0-9_]+|[a-zA-Z0-9_]+)$", "", table_name, flags=re.IGNORECASE)
+    # Remove extra square brackets if present
+    table_name = table_name.replace("[", "").replace("]", "")
+    # Normalize spacing and remove any leading/trailing spaces
+    return table_name.strip()
+ 
+def filter_valid_tables(tables):
+    """Filters out column-like entries and keeps only valid table names."""
+    valid_tables = []
+    for table in tables:
+        # Exclude entries that look like column references (e.g., 'T1.COLUMN')
+        # Exclude any tables that start with a single alias like 'T1.' or 'A.'
+        if re.match(r"[a-zA-Z0-9_\.\s]+", table) and not re.search(r"^[A-Z][0-9]*\.[a-zA-Z_]+", table):
+            valid_tables.append(table)
+    return valid_tables
+ 
+# Example usage
+queries = [
+    """
+    SELECT A.DT_SK,         A.CAL_DAY_DT,         A.DTRB_PERF_RPT_WK_END_DT,         A.DTRB_PERF_RPT_WK_NBR,        A.DTRB_PERF_RPT_YR_NBR,        A.DTRB_PERF_RPT_YR_WK_NBR,       -- A.SRC_SYS_ID,        -- A.CRET_TMSP,        -- A.LST_UPDT_TMSP,        -- A.CRET_USER_ID,        -- A.LST_UPDT_USER_ID,         A.DTRB_PERF_RPT_DAY_TXT,         A.DTRB_PERF_RPT_MTH_TXT,         A.DTRB_PERF_RPT_QTR_TXT,         A.DTRB_PERF_RPT_WK_TXT,        A.DTRB_PERF_RPT_YR_TXT,        B.CAL_WK_STRT_DT,        B.CAL_WK_END_DT,        B.CAL_MTH_STRT_DT,        B.CAL_MTH_END_DT,        B.HDAY_IND,        B.WKDY_IND   FROM COMMON.DTRB_PERF_DATES  AS A INNER JOIN        COMMON.IA_DATES_ITRL AS B     ON A.DT_SK=B.DT_SK  WHERE A.DTRB_PERF_RPT_YR_NBR IN (2022, 2023,2024)      ']),    #'CHANGED TYPE' = TABLE.TRANSFORMCOLUMNTYPES(SOURCE,{{'CAL_DAY_DT', TYPE DATE}, {'DTRB_PERF_RPT_WK_END_DT', TYPE DATE}, {'CAL_WK_STRT_DT', TYPE DATE}, {'CAL_WK_END_DT', TYPE DATE}}),    #'ADDED CUSTOM' = TABLE.ADDCOLUMN(#'CHANGED TYPE', 'WEEK START DATE', EACH DATE.ADDDAYS([CAL_WK_STRT_DT],1)),    #'ADDED CUSTOM1' = TABLE.ADDCOLUMN(#'ADDED CUSTOM', 'WEEK END DATE', EACH DATE.ADDDAYS([CAL_WK_END_DT],1)),    #'REMOVED COLUMNS' = TABLE.REMOVECOLUMNS(#'ADDED CUSTOM1',{'CAL_WK_STRT_DT', 'CAL_WK_END_DT'}),    #'ADDED CUSTOM2' = TABLE.ADDCOLUMN(#'REMOVED COLUMNS', 'CURRENT YEAR', EACH IF DATE.YEAR(DATETIME.LOCALNOW()) = [DTRB_PERF_RPT_YR_NBR] THEN 'CURRENT YEAR' ELSE [DTRB_PERF_RPT_YR_NBR]),    #'ADDED CUSTOM3' = TABLE.ADDCOLUMN(#'ADDED CUSTOM2', 'BUSINESS DAY IND', EACH IF[HDAY_IND] = 'Y' THEN 0 ELSE IF [WKDY_IND] = 'Y' THEN 1ELSE 0)IN    #'ADDED CUSTOM3
+    """
+]
+ 
+extracted_tables = extract_tables(queries)
+print(extracted_tables)
+ 
+ 
