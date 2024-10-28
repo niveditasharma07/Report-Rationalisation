@@ -1,5 +1,4 @@
 import re
-import traceback
 import json
 import codecs
 import pandas as pd
@@ -7,9 +6,45 @@ import re
 from sqlglot import parse_one, exp
 import sqlparse
 from collections import OrderedDict
-from tables_schema import extract_tables
-from single_query import clean_sql_query, extract_columns, split_column_and_alias
+from new_table_schema import extract_tables
+from single_query import extract_columns, split_column_and_alias
 
+KEYWORDS = {"SUM", "MIN", "MAX", "AVG", "CASE", "WHEN", "AND", "THEN", "END", "INTEGER", "FLOOR", "CURRENT", "DATE"}
+
+
+# Function to check if column is complete
+def is_balanced(val):
+    count_open_sqr = val.count("[")
+    count_clse_sqr = val.count("]")
+    count_open_flr = val.count("{")
+    count_clse_flr = val.count("{")
+    count_open_brc = val.count("(")
+    count_clse_brc = val.count(")")  
+    count_quote = val.count("'")
+    if ( (count_open_sqr - count_clse_sqr) != 0 or (count_open_flr - count_clse_flr) !=0 or 
+        (count_open_brc - count_clse_brc) != 0 or (count_quote%2 != 0)):
+        return False
+    else:
+        # Check if Case statements are complete or not
+        if val.strip().startswith("CASE ") and (" END " not in val or " AS " not in val):
+            return False
+        else:
+            return True 
+
+# Function to clean and simplify the SQL query
+def clean_sql_query(query):
+
+    query = result.group(1).upper() + "'"
+    query = query[1:]
+    query = query.replace("#(LF)", " ")
+    query = query.replace("#(TAB)", " ")
+    if query.endswith("'"):
+        query = query[:-1]
+
+    #query = re.sub(r"['\"]", "", query)  # Remove single and double quotes
+    query = re.sub(r"(\n|\t|\r)", " ", query)  # Remove new lines and tabs
+    query = re.sub(r"\s+", " ", query)  # Replace multiple spaces with a single space
+    return query.strip()
 
 # Purpose: The JSON parser will extract the information required to build
 # the table for Report generation - source_data
@@ -17,6 +52,59 @@ from single_query import clean_sql_query, extract_columns, split_column_and_alia
 # a list of Reports or list of Dashboards.
 # Two separate mapping tables are created to map the Report/Dashboard
 # against the Workspace to which it belongs.
+
+def replace_str( s ):
+    s = s.replace('(', ' ')
+    s = s.replace(')', ' ')
+    s = s.replace(',', ' ')
+    return s
+    
+def get_source_table( expression ):
+    expression = expression.replace("from", "FROM")
+    expression = expression.replace("left", "LEFT")
+    expression = expression.replace("right", "RIGHT")
+    expression = expression.replace("inner", "INNER")
+
+    val = ""
+    result = re.search('FROM (.*) LEFT', expression)
+    if result is not None:
+        val = result.group(1)
+        arr = val.split(" ")
+        i = 0
+        for a in arr:
+            if a == "LEFT":
+                break
+            i = i+1
+        val = arr[i-1]
+        
+    if val != "":
+        return val
+        
+    result = re.search('FROM (.*) INNER', expression)
+    if result is not None:
+        val = result.group(1)
+        arr = val.split(" ")
+        i = 0
+        for a in arr:
+            if a == "INNER":
+                break
+            i = i+1
+        val = arr[i-1]
+
+    if val != "":
+        return val
+        
+    result = re.search('FROM (.*)#', expression)
+    if result is not None:
+        val = result.group(1)
+        arr = val.split("#")
+        arr = arr[0].split(" ")
+        n = len(arr)
+        val = arr[n-1]
+        if val == "START":
+            val = ""
+        
+    return val        
 
 report_id_list = []
 report_name_list = []
@@ -30,6 +118,28 @@ file_list = []
 db_list = []
 source_list = []
 reports_with_database_source = []
+passed_queries = []
+
+file = open("passed_queries.txt", 'r')
+lines = file.readlines()
+
+for line in lines:
+    if len(line.strip()) > 0:
+        query = line.upper() + "'"
+        query = query.replace("#(LF)", " ")
+        query = query.replace("#(TAB)", " ")
+        if query.endswith("'"):
+            query = query[:-1]
+
+        #query = re.sub(r"['\"]", "", query)  # Remove single and double quotes
+        query = re.sub(r"(\n|\t|\r)", " ", query)  # Remove new lines and tabs
+        query = re.sub(r"\s+", " ", query)  # Replace multiple spaces with a single space
+        query = query.strip()        
+        passed_queries.append(query)
+
+print("Total passed queries:")
+print(len(passed_queries))
+print()
 
 FILE_LOC = "metadatafile.txt"
 print()
@@ -285,9 +395,9 @@ for line in lines:
                                     "reportId": rep_id,      # Assuming 'report_id' is available
                                     "reportName": reportName   # Assuming 'report_name' is available
                                         })  
-                                # for report in reports_with_database_source:
-                                #     print(f"Report ID: {report['reportId']}, Report Name: {report['reportName']}")  
-                                # print(f"Total number of reports with database source: {len(reports_with_database_source)}")
+                                #for report in reports_with_database_source:
+                                #    print(f"Report ID: {report['reportId']}, Report Name: {report['reportName']}")  
+                                #print(f"Total number of reports with database source: {len(reports_with_database_source)}")
 
                             else:
                                 sourceType = "Report metadata"
@@ -301,30 +411,37 @@ for line in lines:
                                     result = re.search('Query=(.*)\'', expression)
                                     query = result.group(1).upper() + "'"
                                     query = clean_sql_query(query)
-                                    
-                                    # Get Table Names
-                                    source_table_names = extract_tables(query)
 
-                                    columns = extract_columns(query)
-                                    all_columns = {}
-                                    for column in columns:
-                                        input_columns, output_column = split_column_and_alias(column)
-                                        all_columns[output_column] = input_columns
-                                    for meta_col in columnNames:
-                                        col_val = meta_col
-                                        if meta_col in all_columns:
-                                            value = all_columns[meta_col]
-                                            if value:
-                                                col_val = str(value) 
-                                        source_column_name_list.append(col_val)
-                                        if source_table_names:
-                                            source_table_name_list.append(source_table_names)
-                                        else:
-                                            source_table_name_list.append(tableName)
-                                        table_name_list.append(tableName)
+                                    if query in passed_queries:
+                                        print(query)
+                                        # Get Table Names
+                                        queries = []
+                                        queries.append(query)
+                                        source_table_names = extract_tables(queries)
+                                        columns = extract_columns(query)
+                                        all_columns = {}
+                                        for column in columns:
+                                            input_columns, output_column = split_column_and_alias(column)
+                                            all_columns[output_column] = input_columns
+                                        for meta_col in columnNames:
+                                            col_val = meta_col
+                                            if meta_col in all_columns:
+                                                value = all_columns[meta_col]
+                                                if value:
+                                                    col_val = str(value) 
+                                            source_column_name_list.append(col_val)
+                                            if source_table_names:
+                                                source_table_name_list.append(source_table_names)
+                                            else:
+                                                source_table_name_list.append(tableName)
+                                            table_name_list.append(tableName)
+                                    else:
+                                        for meta_col in columnNames:
+                                            source_column_name_list.append("NOT_AVAILABLE")
+                                            source_table_name_list.append("NOT_AVAILABLE")
+                                            table_name_list.append("NOT_AVAILABLE")
                                 except Exception as e:
                                     print(f"Error processing report {rep_id}: {str(e)}")
-                                    traceback.print_exc()
                                     for col in columnNames:
                                         source_column_name_list.append("") 
                                         source_table_name_list.append("")  
@@ -374,7 +491,7 @@ with pd.ExcelWriter(f"workspace_dashboard.xlsx") as writer:
 
 
 df = pd.DataFrame(data=dict)
-with pd.ExcelWriter(f"source_data.xlsx") as writer:
+with pd.ExcelWriter(f"source_data_latest.xlsx") as writer:
     df.to_excel(writer, sheet_name='source_data', index=False)
 
 df = pd.DataFrame(reports_with_database_source)    
