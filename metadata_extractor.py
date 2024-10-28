@@ -10,6 +10,7 @@ from new_table_schema import extract_tables
 from single_query import extract_columns, split_column_and_alias
 
 KEYWORDS = {"SUM", "MIN", "MAX", "AVG", "CASE", "WHEN", "AND", "THEN", "END", "INTEGER", "FLOOR", "CURRENT", "DATE"}
+query_index_map={}
 
 
 # Function to check if column is complete
@@ -119,11 +120,15 @@ db_list = []
 source_list = []
 reports_with_database_source = []
 passed_queries = []
+query_ids = []
 
 file = open("passed_queries.txt", 'r')
 lines = file.readlines()
 
+file_idx=0
+list_idx = 0 
 for line in lines:
+    file_idx = file_idx+1 
     if len(line.strip()) > 0:
         query = line.upper() + "'"
         query = query.replace("#(LF)", " ")
@@ -135,7 +140,9 @@ for line in lines:
         query = re.sub(r"(\n|\t|\r)", " ", query)  # Remove new lines and tabs
         query = re.sub(r"\s+", " ", query)  # Replace multiple spaces with a single space
         query = query.strip()        
+        list_idx = list_idx+1
         passed_queries.append(query)
+        query_index_map[list_idx] = file_idx
 
 print("Total passed queries:")
 print(len(passed_queries))
@@ -264,10 +271,12 @@ for line in lines:
                                 report_id_list.append(rep_id)
                                 report_name_list.append(reportName)
                                 data_type_list.append(dataType)
-
+                                query_ids.append("")
 
                         if ("source" in table):
                             expression = table['source'][0]['expression']
+                            expression = expression.replace("#(lf)", " ")
+                            expression = expression.replace("#(tab)", " ")
 
                             if "Database" not in expression:                                        
                                 # Get columns
@@ -413,7 +422,7 @@ for line in lines:
                                     query = clean_sql_query(query)
 
                                     if query in passed_queries:
-                                        print(query)
+                                        #print(query)
                                         # Get Table Names
                                         queries = []
                                         queries.append(query)
@@ -423,7 +432,14 @@ for line in lines:
                                         for column in columns:
                                             input_columns, output_column = split_column_and_alias(column)
                                             all_columns[output_column] = input_columns
+
+                                        num_cols = len(columnNames)
+                                        query_ids = query_ids[:-num_cols]
+                                        list_idx = passed_queries.index(query) + 1
+                                        query_id = query_index_map[list_idx]
+
                                         for meta_col in columnNames:
+                                            query_ids.append(query_id)
                                             col_val = meta_col
                                             if meta_col in all_columns:
                                                 value = all_columns[meta_col]
@@ -453,8 +469,7 @@ for line in lines:
                                             
                                 for col in columnNames:
                                     source_column_name_list.append(col) 
-                                    source_table_name_list.append(tableName)
-                                    
+                                    source_table_name_list.append(tableName)                                                                            
 
                         if sourceType == "Database" and datasource_value == "":
                             datasource_value = expression
@@ -463,7 +478,7 @@ for line in lines:
                         for col in columnNames:
                             file_list.append(datasource_value)
                             db_list.append(db_connection)
-                            source_list.append(sourceType)                                                                                                   
+                            source_list.append(sourceType)                               
                             
                     index = index + 1
 
@@ -478,7 +493,8 @@ dict = {
     'ColumnType': column_type_list,
     'Source': source_list,
     'DB_Connection': db_list,
-    'Datasource': file_list
+    'Datasource': file_list,
+    'Query_ID': query_ids
 }
 
 # Writing in excel
