@@ -97,6 +97,7 @@ workspace_id_list = []
 workspace_name_list = []
 table_name_list = []
 source_table_name_list = []
+source_column_list = []
 file_list = []
 db_list = []
 source_list = []
@@ -348,16 +349,20 @@ for line in lines:
                                 query = result.group(1) + "'"     
                                 query = clean_sql_query(query)
 
-                                source_table_names, sourc_tables_and_cols = extractTables(query) 
-                                total_tables = len(source_table_names)
+                                source_table_names, source_tables_and_cols = extractTables(query) 
+                                all_tables = list(source_tables_and_cols.keys())
+                                total_tables = len(all_tables)
 
                                 if total_tables == 0:
-                                    source_table_name_list.append(tableName)        
-                                elif total_tables == 1:
-                                    source_table_name_list.append(source_table_names[0])  
-                                elif total_tables > 1:
-                                    source_table_name_list.append(source_table_names[0])  
-                                    for i in range(1,total_tables):
+                                    source_table_name_list.append(tableName)   
+                                    source_column_list.append("")     
+                                elif total_tables >= 1:
+                                    table_name = all_tables[0]
+                                    source_table_name_list.append(table_name)  
+                                    all_cols = source_tables_and_cols[table_name]
+                                    source_column_list.append(all_cols[0])
+                                    total_cols = len(all_cols)
+                                    for j in range(1, total_cols):
                                         workspace_id_list.append(workspaceId)
                                         workspace_name_list.append(workspaceName)
                                         report_id_list.append(reportId)
@@ -366,10 +371,28 @@ for line in lines:
                                         source_list.append(sourceType) 
                                         file_list.append(datasource_value)
                                         db_list.append(db_connection)                                        
-                                        source_table_name_list.append(source_table_names[i])
+                                        source_table_name_list.append(table_name)
+                                        source_column_list.append(all_cols[j])
+                                    if total_tables > 1:
+                                        for i in range(1,total_tables):
+                                            table_name = all_tables[i]
+                                            all_cols = source_tables_and_cols[table_name]
+                                            total_cols = len(all_cols)
+                                            for j in range(0, total_cols):
+                                                workspace_id_list.append(workspaceId)
+                                                workspace_name_list.append(workspaceName)
+                                                report_id_list.append(reportId)
+                                                report_name_list.append(reportName)
+                                                table_name_list.append(tableName)
+                                                source_list.append(sourceType) 
+                                                file_list.append(datasource_value)
+                                                db_list.append(db_connection)                                        
+                                                source_table_name_list.append(table_name)
+                                                source_column_list.append(all_cols[j])
 
                             if source_table_names == "":
-                                source_table_name_list.append(tableName)                            
+                                source_table_name_list.append(tableName)  
+                                source_column_list.append("")                          
                                 
                                                         
                     index = index + 1
@@ -381,13 +404,13 @@ dict = {
     'ReportName': report_name_list,
     'PBI TableName': table_name_list,
     'Source TableName': source_table_name_list,
+    'Source ColumnName': source_column_list,
     'Source': source_list,
     'DB_Connection': db_list,
     'Datasource': file_list,
 }
 
 df = pd.DataFrame(data=dict)
-
 
 
 def split_source_table_name(df):
@@ -415,5 +438,6 @@ df['Source'] = df.apply(
  
 
 
-with pd.ExcelWriter(f"basic_metadata_extract.xlsx") as writer:
+
+with pd.ExcelWriter(f"detailed_metadata_extract.xlsx") as writer:
     df.to_excel(writer, sheet_name='source_data', index=False)
